@@ -61,31 +61,6 @@ const waitForHtmlElement = async () => {
   });
 };
 
-const waitForHeadElement = async () => {
-  if (document.head) return;
-
-  const stack = new Error().stack;
-  await new Promise((resolve, reject) => {
-    try {
-      const observer = new MutationObserver(
-        wrapErrorHandler(
-          function onHeadElementMutation() {
-            if (!document.head) return;
-
-            observer.disconnect();
-            resolve();
-          }.bind(this),
-          true
-        )
-      );
-      observer.observe(document.documentElement, { childList: true });
-    } catch (ex) {
-      appendErrorStack(stack, ex);
-      reject(ex);
-    }
-  });
-};
-
 const captureResourceLoadingException = async (url, event) => {
   if (!chrome?.runtime?.id) {
     setResourceWarning();
@@ -152,7 +127,6 @@ wrapErrorHandler(async function loadContentScript() {
   });
 
   await waitForHtmlElement();
-  await waitForHeadElement();
 
   // const addWebGLLint = () => {
   //   const s = document.createElement('script')
@@ -172,80 +146,6 @@ wrapErrorHandler(async function loadContentScript() {
     return;
   }
 
-  let loaded = await new Promise((resolve) => {
-    let url;
-    try {
-      url = chrome.runtime.getURL('styles/content.css');
-    } catch {
-      setResourceWarning();
-      resolve(false);
-      return;
-    }
-
-    if (document.head.querySelector(`link[href="${url}"]`)) {
-      resolve(true);
-      return;
-    }
-
-    const style = document.createElement('link');
-    style.href = url;
-    style.rel = 'stylesheet';
-    style.addEventListener(
-      'error',
-      async function injectStyleOnError(event) {
-        await captureResourceLoadingException(style.href, event);
-        resolve(false);
-      }.bind(this)
-    );
-    style.addEventListener(
-      'load',
-      function injectStyleOnLoad() {
-        resolve(true);
-      }.bind(this)
-    );
-    document.head.appendChild(style);
-  });
-  if (!chrome?.runtime?.id) {
-    setResourceWarning();
-    return;
-  }
-  if (!loaded) return;
-
-  loaded = await new Promise((resolve) => {
-    let url;
-    try {
-      url = chrome.runtime.getURL('scripts/injected.js');
-    } catch {
-      setResourceWarning();
-      resolve(false);
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = url;
-    script.async = true;
-    script.setAttribute('data-crash-options', JSON.stringify(crashOptions));
-    script.setAttribute('data-version', version);
-    script.addEventListener(
-      'error',
-      async function injectScriptOnError(event) {
-        await captureResourceLoadingException(script.src, event);
-        resolve(false);
-      }.bind(this)
-    );
-    script.addEventListener(
-      'load',
-      function injectStyleOnLoad() {
-        resolve(true);
-      }.bind(this)
-    );
-    document.head.appendChild(script);
-  });
-  if (!chrome?.runtime?.id) {
-    setResourceWarning();
-    return;
-  }
-  if (!loaded) return;
 
   let scriptUrl;
   try {
